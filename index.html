@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annotation Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+    <style>
+      
+    </style>
+</head>
+
+<body>
+    <div class="flex h-screen flex-row bg-black">
+
+        <div class="flex w-1/5 flex-col bg-green-400 text-white">
+            <div>
+                <input type="file" id="imageLoader" />
+            </div>
+            <div>
+                <button id="rectAnnotateBtn" disabled>Draw Rectangle</button>
+            </div>
+            <div>
+
+
+                <button id="polyAnnotateBtn" disabled>Draw Polygon</button>
+            </div>
+            <div>
+                <button id="clearAnnotationsBtn" disabled>Clear Annotations</button>
+            </div>
+            <div>
+                <button id="saveImageBtn">Save Image</button>
+            </div>
+
+        </div>
+        <div class="flex w-3/5 bg-slate-300">
+        <canvas id="canvas" width="800" height="600"></canvas></div>
+        <div class="flex w-1/5 flex-col bg-red-500">
+            <div class="p-4">Column 3</div>
+            <div class="p-4">Annotation</div>
+          </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageLoader = document.getElementById('imageLoader');
+        const rectAnnotateBtn = document.getElementById('rectAnnotateBtn');
+        const polyAnnotateBtn = document.getElementById('polyAnnotateBtn');
+        const clearAnnotationsBtn = document.getElementById('clearAnnotationsBtn');
+
+
+        const saveImageBtn = document.getElementById('saveImageBtn');
+
+
+
+        let image = new Image();
+        let annotations = []; // Array to store all annotations (rectangles + polygons)
+        let activeAnnotation = null; // The currently active annotation
+        let isDrawing = false;
+        let isPolygonDrawing = false; // To track polygon drawing mode
+        let polygonPoints = [];
+        let selectedHandle = null;
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let offsetX, offsetY;
+
+        const HANDLE_SIZE = 12;
+        const DEFAULT_IMAGE_URL = 'image.png'; // Replace with your default image path
+
+        // Load default image on page load
+        window.onload = () => {
+            image.src = DEFAULT_IMAGE_URL;
+            image.onload = () => {
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                rectAnnotateBtn.disabled = false;
+                polyAnnotateBtn.disabled = false;
+                clearAnnotationsBtn.disabled = false;
+            };
+        };
+
+
+
+
+
+
+        // Load image
+        imageLoader.addEventListener('change', (e) => {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                image.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        });
+
+        // Enable buttons after the image is loaded
+        image.onload = () => {
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            rectAnnotateBtn.disabled = false;
+            polyAnnotateBtn.disabled = false;
+            clearAnnotationsBtn.disabled = false;
+        };
+
+        // Handle the Annotate Rectangle button click
+        rectAnnotateBtn.addEventListener('click', () => {
+            activeAnnotation = null;
+            isDrawing = true;
+            isDragging = false;
+            isPolygonDrawing = false;
+        });
+
+        // Handle the Annotate Polygon button click
+        polyAnnotateBtn.addEventListener('click', () => {
+            activeAnnotation = null;
+            isDrawing = false;
+            isDragging = false;
+            isPolygonDrawing = true;
+            polygonPoints = [];
+        });
+
+        // Start drawing or dragging
+        canvas.addEventListener('mousedown', (e) => {
+            const { x, y } = getMousePos(e);
+            dragStart = { x, y };
+
+            if (isDrawing) {
+                activeAnnotation = { type: 'rectangle', x, y, w: 0, h: 0 };
+                annotations.push(activeAnnotation); // Add new rectangle
+            } else if (isPolygonDrawing) {
+                polygonPoints.push({ x, y });
+                if (polygonPoints.length > 1 && isNearFirstPoint(polygonPoints, x, y)) {
+                    annotations.push({ type: 'polygon', points: polygonPoints });
+                    polygonPoints = [];
+                    isPolygonDrawing = false;
+                }
+                redrawCanvas();
+            } else {
+                for (let annotation of annotations) {
+                    if (annotation.type === 'rectangle') {
+                        selectedHandle = findHandle(annotation, x, y);
+                        if (selectedHandle) {
+                            activeAnnotation = annotation;
+                            isDragging = false;
+                            break;
+                        } else if (isInsideAnnotation(annotation, x, y)) {
+                            activeAnnotation = annotation;
+                            isDragging = true;
+                            offsetX = x - annotation.x;
+                            offsetY = y - annotation.y;
+                            break;
+                        }
+                    } else if (annotation.type === 'polygon') {
+                        selectedHandle = findPolygonHandle(annotation, x, y);
+                        if (selectedHandle) {
+                            activeAnnotation = annotation;
+                            isDragging = false;
+                            break;
+                        } else if (isInsidePolygon(annotation, x, y)) {
+                            activeAnnotation = annotation;
+                            isDragging = true;
+                            const pointIndex = selectedHandle.index;
+                            offsetX = x - annotation.points[pointIndex].x;
+                            offsetY = y - annotation.points[pointIndex].y;
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Continue drawing or moving
+        canvas.addEventListener('mousemove', (e) => {
+            const { x, y } = getMousePos(e);
+
+            if (isDrawing && activeAnnotation) {
+                activeAnnotation.w = x - activeAnnotation.x;
+                activeAnnotation.h = y - activeAnnotation.y;
+                redrawCanvas();
+            } else if (isDragging && activeAnnotation) {
+                if (activeAnnotation.type === 'rectangle') {
+                    activeAnnotation.x = x - offsetX;
+                    activeAnnotation.y = y - offsetY;
+                } else if (activeAnnotation.type === 'polygon') {
+                    const dx = x - dragStart.x;
+                    const dy = y - dragStart.y;
+                    activeAnnotation.points = activeAnnotation.points.map(point => ({
+                        x: point.x + dx,
+                        y: point.y + dy
+                    }));
+                    dragStart = { x, y }; // Update drag start position
+                }
+                redrawCanvas();
+            } else if (selectedHandle && activeAnnotation) {
+                if (activeAnnotation.type === 'rectangle') {
+                    adjustRectangleFromHandle(selectedHandle, activeAnnotation, x, y);
+                } else if (activeAnnotation.type === 'polygon') {
+                    activeAnnotation.points[selectedHandle.index] = { x, y };
+                }
+                redrawCanvas();
+            } else if (isPolygonDrawing) {
+                redrawCanvas();
+                drawPolygonPreview(polygonPoints, x, y); // Show preview of polygon while drawing
+            }
+        });
+
+        // End drawing or dragging
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+            isDragging = false;
+            selectedHandle = null;
+        });
+
+        // Clear annotations
+        clearAnnotationsBtn.addEventListener('click', () => {
+            annotations = [];
+            redrawCanvas();
+        });
+
+        // Handle finding resize handles for rectangle
+        function findHandle(annotation, x, y) {
+            const handles = getHandles(annotation);
+            for (let handle of handles) {
+                if (x >= handle.x - HANDLE_SIZE / 2 && x <= handle.x + HANDLE_SIZE / 2 &&
+                    y >= handle.y - HANDLE_SIZE / 2 && y <= handle.y + HANDLE_SIZE / 2) {
+                    return handle;
+                }
+            }
+            return null;
+        }
+
+        // Handle finding resize handles for polygon
+        function findPolygonHandle(annotation, x, y) {
+            const handles = getPolygonHandles(annotation);
+            for (let handle of handles) {
+                if (x >= handle.x - HANDLE_SIZE / 2 && x <= handle.x + HANDLE_SIZE / 2 &&
+                    y >= handle.y - HANDLE_SIZE / 2 && y <= handle.y + HANDLE_SIZE / 2) {
+                    return handle;
+                }
+            }
+            return null;
+        }
+
+        // Check if inside rectangle
+        function isInsideAnnotation(annotation, x, y) {
+            return x > annotation.x && x < annotation.x + annotation.w &&
+                y > annotation.y && y < annotation.y + annotation.h;
+        }
+
+        // Check if inside polygon
+        function isInsidePolygon(annotation, x, y) {
+            const { points } = annotation;
+            let inside = false;
+            for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+                const xi = points[i].x, yi = points[i].y;
+                const xj = points[j].x, yj = points[j].y;
+
+                const intersect = ((yi > y) !== (yj > y)) &&
+                    (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        // Adjust the rectangle
+        function adjustRectangleFromHandle(handle, annotation, x, y) {
+            if (handle.position === 'top-left') {
+                annotation.w += annotation.x - x;
+                annotation.h += annotation.y - y;
+                annotation.x = x;
+                annotation.y = y;
+            } else if (handle.position === 'top-right') {
+                annotation.w = x - annotation.x;
+                annotation.h += annotation.y - y;
+                annotation.y = y;
+            } else if (handle.position === 'bottom-left') {
+                annotation.w += annotation.x - x;
+                annotation.x = x;
+                annotation.h = y - annotation.y;
+            } else if (handle.position === 'bottom-right') {
+                annotation.w = x - annotation.x;
+                annotation.h = y - annotation.y;
+            } else if (handle.position === 'mid-top') {
+                annotation.h += annotation.y - y;
+                annotation.y = y;
+            } else if (handle.position === 'mid-bottom') {
+                annotation.h = y - annotation.y;
+            } else if (handle.position === 'mid-left') {
+                annotation.w += annotation.x - x;
+                annotation.x = x;
+            } else if (handle.position === 'mid-right') {
+                annotation.w = x - annotation.x;
+            }
+        }
+
+        // Get mouse position relative to canvas
+        function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width; // Relationship between canvas and viewport sizes
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+    };
+}
+
+
+        // Draw all annotations
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (image.src) {
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            }
+            for (let annotation of annotations) {
+                if (annotation.type === 'rectangle') {
+                    drawRectangle(annotation);
+                } else if (annotation.type === 'polygon') {
+                    drawPolygon(annotation);
+                }
+            }
+        }
+
+        // Draw rectangle
+        function drawRectangle(annotation) {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.1)'; // Light red color for fill
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 3;
+            ctx.fillRect(annotation.x, annotation.y, annotation.w, annotation.h); // Fill rectangle
+            ctx.strokeRect(annotation.x, annotation.y, annotation.w, annotation.h); // Outline rectangle
+            drawHandles(annotation);
+        }
+
+
+        // Draw polygon
+        function drawPolygon(annotation) {
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.1)'; // Light blue color for fill
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(annotation.points[0].x, annotation.points[0].y);
+            for (let point of annotation.points.slice(1)) {
+                ctx.lineTo(point.x, point.y);
+            }
+            ctx.closePath();
+            ctx.fill(); // Fill polygon
+            ctx.stroke(); // Outline polygon
+            drawPolygonHandles(annotation);
+        }
+
+
+        // Draw handles for rectangle
+        function drawHandles(annotation) {
+            const handles = getHandles(annotation);
+            ctx.fillStyle = 'blue';
+            for (let handle of handles) {
+                ctx.beginPath();
+                ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Draw handles for polygon
+        function drawPolygonHandles(annotation) {
+            const handles = getPolygonHandles(annotation);
+            ctx.fillStyle = 'red';
+            for (let handle of handles) {
+                ctx.beginPath();
+                ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Get rectangle handles
+        function getHandles(annotation) {
+            const handles = [
+                { x: annotation.x, y: annotation.y, position: 'top-left' },
+                { x: annotation.x + annotation.w, y: annotation.y, position: 'top-right' },
+                { x: annotation.x, y: annotation.y + annotation.h, position: 'bottom-left' },
+                { x: annotation.x + annotation.w, y: annotation.y + annotation.h, position: 'bottom-right' },
+                { x: annotation.x + annotation.w / 2, y: annotation.y, position: 'mid-top' },
+                { x: annotation.x + annotation.w / 2, y: annotation.y + annotation.h, position: 'mid-bottom' },
+                { x: annotation.x, y: annotation.y + annotation.h / 2, position: 'mid-left' },
+                { x: annotation.x + annotation.w, y: annotation.y + annotation.h / 2, position: 'mid-right' }
+            ];
+            return handles;
+        }
+
+        // Get polygon handles
+        function getPolygonHandles(annotation) {
+            return annotation.points.map((point, index) => ({
+                x: point.x,
+                y: point.y,
+                index
+            }));
+        }
+
+        // Draw polygon preview while drawing
+        function drawPolygonPreview(points, x, y) {
+            if (points.length > 0) {
+                ctx.strokeStyle = 'green'; // Color for the polygon outline
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let point of points.slice(1)) {
+                    ctx.lineTo(point.x, point.y);
+                }
+                ctx.lineTo(x, y); // Draw line to the current mouse position
+                ctx.stroke();
+
+                // Draw points
+                ctx.fillStyle = 'red'; // Color for the points
+                points.forEach(point => {
+                    drawPoint(point.x, point.y);
+                });
+
+                // Draw the current point (being dragged)
+                drawPoint(x, y);
+            }
+        }
+
+        // Helper function to draw a point
+        function drawPoint(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+
+        // Check if the point is near the first point to complete polygon
+        function isNearFirstPoint(points, x, y) {
+            const firstPoint = points[0];
+            return Math.abs(firstPoint.x - x) < HANDLE_SIZE && Math.abs(firstPoint.y - y) < HANDLE_SIZE;
+        }
+        // Save image with annotations
+        saveImageBtn.addEventListener('click', () => {
+            const dataURL = canvas.toDataURL();
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'annotated-image.png';
+            link.click();
+        });
+    </script>
+    
+</body>
+
+</html>
