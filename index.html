@@ -5,41 +5,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Annotation Tool</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button:hover:enabled {
+            background-color: #2563eb; /* Darker blue for hover */
+        }
+
+        input[type="file"]::file-selector-button {
+            background-color: #1d4ed8; /* Blue button for file input */
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .shadow {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+    cursor: crosshair;
+    
+}
+
     </style>
 </head>
 
-<body>
-    <div class="flex h-screen flex-row bg-black">
+<body class="bg-gray-100">
 
-        <div class="flex w-1/5 flex-col bg-green-400 text-white">
-            <div>
-                <input type="file" id="imageLoader" />
-            </div>
-            <div>
-                <button id="rectAnnotateBtn" disabled>Draw Rectangle</button>
-            </div>
-            <div>
-
-
-                <button id="polyAnnotateBtn" disabled>Draw Polygon</button>
-            </div>
-            <div>
-                <button id="clearAnnotationsBtn" disabled>Clear Annotations</button>
-            </div>
-            <div>
-                <button id="saveImageBtn">Save Image</button>
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="flex w-1/5 flex-col bg-white px-8 py-12 space-y-6 shadow-md">
+            <div class="mb-8">
+                <h2 class="text-gray-800 text-xl font-semibold">Tools</h2>
             </div>
 
+            <div>
+                <input type="file" class="bg-gray-200 p-2 w-full rounded-md" id="imageLoader" />
+            </div>
+            <div>
+                <button id="rectAnnotateBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow" disabled>
+                    Draw Rectangle
+                </button>
+            </div>
+            <div>
+                <button id="polyAnnotateBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
+                    Draw Polygon
+                </button>
+            </div>
+            <div>
+                <button id="clearAnnotationsBtn" disabled class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
+                    Clear Annotations
+                </button>
+            </div>
+            <div>
+                <button id="saveImageBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
+                    Save Image
+                </button>
+            </div>
         </div>
-        <div class="flex w-3/5 bg-slate-300">
-        <canvas id="canvas" width="800" height="600"></canvas></div>
-        <div class="flex w-1/5 flex-col bg-red-500">
-            <div class="p-4">Column 3</div>
-            <div class="p-4">Annotation</div>
-          </div>
+
+        <!-- Canvas Area -->
+        <div class="flex w-3/5 bg-gray-50 justify-center items-center shadow-md">
+            <canvas id="canvas" width="800" height="600" class="border border-gray-300 shadow"></canvas>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="flex w-1/5 flex-col bg-white px-8 py-12 space-y-6 shadow-md">
+            <div>
+                <h2 class="text-gray-800 text-xl font-semibold">Annotations</h2>
+            </div>
+            <div class="text-gray-600">Use the tools on the left to start annotating.</div>
+        </div>
     </div>
     <script>
         const canvas = document.getElementById('canvas');
@@ -439,6 +485,8 @@
             link.click();
         });
     </script>
+
+  
     
 </body>
 
