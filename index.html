@@ -15,10 +15,10 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
-
+/* 
         button:hover:enabled {
             background-color: #2563eb; /* Darker blue for hover */
-        }
+        } */
 
         input[type="file"]::file-selector-button {
             background-color: #1d4ed8; /* Blue button for file input */
@@ -41,6 +41,7 @@
 </head>
 
 <body class="bg-gray-100">
+  
 
     <div class="flex h-screen">
         <!-- Sidebar -->
@@ -54,24 +55,30 @@
             </div>
             <div>
                 <button id="rectAnnotateBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow" disabled>
-                    Draw Rectangle
+                    Draw Rectangle  
                 </button>
             </div>
             <div>
                 <button id="polyAnnotateBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
-                    Draw Polygon
+                    Draw Polygon  
                 </button>
             </div>
             <div>
                 <button id="clearAnnotationsBtn" disabled class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
-                    Clear Annotations
+                    Clear Annotations 
                 </button>
             </div>
             <div>
                 <button id="saveImageBtn" class="bg-blue-600 text-white w-full py-3 rounded-md shadow">
-                    Save Image
+                    Save Image  
                 </button>
             </div>
+            <div>
+              <button id="deleteAnnotationBtn" class="bg-red-600 text-white w-full py-3 rounded-md shadow" disabled>
+                  Delete 
+              </button>
+          </div>
+          
         </div>
 
         <!-- Canvas Area -->
@@ -80,13 +87,35 @@
         </div>
 
         <!-- Right Sidebar -->
-        <div class="flex w-1/5 flex-col bg-white px-8 py-12 space-y-6 shadow-md">
-            <div>
-                <h2 class="text-gray-800 text-xl font-semibold">Annotations</h2>
-            </div>
-            <div class="text-gray-600">Use the tools on the left to start annotating.</div>
-        </div>
-    </div>
+       <!-- Right Sidebar -->
+<div class="flex w-1/5 flex-col bg-white px-8 py-12 space-y-6 shadow-md">
+  <div>
+      <h2 class="text-gray-800 text-xl font-semibold">Annotations</h2>
+  </div>
+  <div class="text-gray-600">Use the tools on the left to start annotating. 
+    <ul><br>
+      <p>Use shortucts</p>
+      <li>R : Draw Rectangle</li>
+      <li>P : Draw Polygone</li>
+      <li>C : Clear Annotation</li>
+      <li>S : Save Annotated Image</li>
+      <li>Delete : Delete Annotation</li>
+    </ul>
+  </div>
+  <div>
+      <label for="annotationName" class="block text-gray-700">Annotation Name:</label>
+      <input type="text" id="annotationName" class="bg-gray-200 p-2 w-full rounded-md" />
+      <button id="saveAnnotationNameBtn" class="bg-blue-600 text-white w-full py-2 rounded-md shadow mt-2" disabled>
+          Save Name
+      </button>
+  </div>
+  <div>
+      <ul id="annotationList" class="space-y-2">
+          <!-- Annotation names will be displayed here -->
+      </ul>
+  </div>
+</div>
+
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -94,6 +123,8 @@
         const rectAnnotateBtn = document.getElementById('rectAnnotateBtn');
         const polyAnnotateBtn = document.getElementById('polyAnnotateBtn');
         const clearAnnotationsBtn = document.getElementById('clearAnnotationsBtn');
+        const deleteAnnotationBtn = document.getElementById('deleteAnnotationBtn');
+        let annotationIdCounter = 0; // Unique ID for each annotation
 
 
         const saveImageBtn = document.getElementById('saveImageBtn');
@@ -110,6 +141,7 @@
         let isDragging = false;
         let dragStart = { x: 0, y: 0 };
         let offsetX, offsetY;
+        let isUpdatingList = false;
 
         const HANDLE_SIZE = 12;
         const DEFAULT_IMAGE_URL = 'image.png'; // Replace with your default image path
@@ -124,6 +156,49 @@
                 clearAnnotationsBtn.disabled = false;
             };
         };
+
+        // const saveAnnotationNameBtn = document.getElementById('saveAnnotationNameBtn');
+        // const annotationName = document.getElementById('annotationName');
+
+        saveAnnotationNameBtn.addEventListener('click',(evt)=>{
+          isUpdatingList=false;
+        })
+    
+
+        annotationName.addEventListener('click',(evt)=>{
+          isUpdatingList=true;
+        })
+
+        annotationName.addEventListener('blur', (evt) => {
+        isUpdatingList = false; // Re-enable shortcuts when the input loses focus
+    });
+    
+document.addEventListener('keydown', (event) => {
+    if (isUpdatingList) return; // Ignore key events if updating the list
+
+    switch (event.key) {
+        case 'Delete':
+            deleteActiveAnnotation(); // Delete active annotation
+            break;
+        case 'r':
+        case 'R':
+            rectAnnotateBtn.click(); // Trigger rectangle drawing
+            break;
+        case 'p':
+        case 'P':
+            polyAnnotateBtn.click(); // Trigger polygon drawing
+            break;
+        case 'c':
+        case 'C':
+            clearAnnotationsBtn.click(); // Trigger clear annotations
+            break;
+        case 's':
+        case 'S':
+            saveImageBtn.click(); // Trigger save image
+            break;
+    }
+});
+
 
 
 
@@ -484,6 +559,89 @@
             link.download = 'annotated-image.png';
             link.click();
         });
+
+        //delete annotation code
+
+        // Enable or disable delete button based on the presence of annotations
+function updateDeleteButtonState() {
+    const deleteButton = document.getElementById('deleteAnnotationBtn');
+    deleteButton.disabled = !activeAnnotation; // Disable if no active annotation
+}
+
+// Call this function after modifying annotations
+function deleteActiveAnnotation() {
+    if (activeAnnotation) {
+        annotations = annotations.filter(annotation => annotation !== activeAnnotation);
+        activeAnnotation = null; // Clear active annotation
+        redrawCanvas();
+        updateDeleteButtonState(); // Update the delete button state
+    }
+}
+
+// Add event listener for delete button
+deleteAnnotationBtn.addEventListener('click', deleteActiveAnnotation);
+
+// Update delete button state on annotation selection
+canvas.addEventListener('mousedown', (e) => {
+    // Existing code for checking selected annotations...
+    if (activeAnnotation) {
+    document.getElementById('annotationName').value = activeAnnotation.name || '';
+    document.getElementById('saveAnnotationNameBtn').disabled = false;
+} else {
+    document.getElementById('annotationName').value = '';
+    document.getElementById('saveAnnotationNameBtn').disabled = true;
+}
+
+    // Update delete button state
+    updateDeleteButtonState();
+});
+
+document.getElementById('saveAnnotationNameBtn').addEventListener('click', () => {
+    const nameInput = document.getElementById('annotationName');
+    if (activeAnnotation) {
+        activeAnnotation.name = nameInput.value;
+        updateAnnotationList();
+        nameInput.value = '';
+        document.getElementById('saveAnnotationNameBtn').disabled = true;
+    }
+});
+
+function updateAnnotationList() {
+   
+
+    const list = document.getElementById('annotationList');
+    list.innerHTML = '';
+    annotations.forEach((annotation) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = annotation.name || `Annotation ${annotation.id + 1}`;
+        listItem.classList.add('cursor-pointer', 'hover:underline');
+        listItem.addEventListener('click', () => {
+            activeAnnotation = annotation;
+            document.getElementById('annotationName').value = annotation.name || '';
+            document.getElementById('saveAnnotationNameBtn').disabled = false;
+            redrawCanvas(); // Ensure this redraws the canvas
+        });
+        list.appendChild(listItem);
+    });
+
+     // Set the flag back to false when done
+}
+
+function addAnnotation(annotation) {
+    annotation.id = annotationIdCounter++;
+    annotations.push(annotation);
+    updateAnnotationList();
+}
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Delete') {
+        deleteActiveAnnotation(); // Call the function to delete the active annotation
+    }
+});
+
+
+
+
     </script>
 
   
